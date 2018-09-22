@@ -14,6 +14,15 @@ and does not endorse or recommend this library.
 
 ## Usage
 
+### tcli
+
+The `tcli` tool is a small command-line interface for making requests.
+
+```shell
+$ go install github.com/timpalpant/go-tradier/tcli
+$ tcli -tradier.account XXXXX -tradier.apikey XXXXX -command positions
+```
+
 ### Fetch real-time top-of-book quotes
 
 ```Go
@@ -21,88 +30,110 @@ package main
 
 import (
   "fmt"
-  "net/http"
 
   "github.com/timpalpant/go-tradier"
 )
 
 func main() {
-  client := iex.NewClient(&http.Client{})
+  params := tradier.DefaultParams("your-api-key-here")
+  client := tradier.NewClient(params)
 
-  quotes, err := client.GetTOPS([]string{"AAPL", "SPY"})
+  quotes, err := client.GetQuotes([]string{"AAPL", "SPY"})
   if err != nil {
-      panic(err)
+    panic(err)
   }
 
   for _, quote := range quotes {
-      fmt.Printf("%v: bid $%.02f (%v shares), ask $%.02f (%v shares) [as of %v]\n",
-          quote.Symbol, quote.BidPrice, quote.BidSize,
-          quote.AskPrice, quote.AskSize, quote.LastUpdated)
+    fmt.Printf("%v: bid $%.02f (%v shares), ask $%.02f (%v shares)\n",
+      quote.Symbol, quote.Bid, quote.BidSize, quote.Ask, quote.AskSize)
   }
 }
 ```
 
-### Fetch historical top-of-book quote (L1 tick) data.
-
-Historical tick data (TOPS and DEEP) can be parsed using the `PcapScanner`.
+### Stream real-time top-of-book trades and quotes (L1 TAQ) data.
 
 ```Go
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"os"
-	"time"
 
 	"github.com/timpalpant/go-tradier"
-	"github.com/timpalpant/go-tradier/iextp/tops"
 )
 
 func main() {
-	client := iex.NewClient(&http.Client{})
+	params := tradier.DefaultParams("your-api-key-here")
+	client := tradier.NewClient(params)
 
-	// Get historical data dumps available for 2016-12-12.
-	histData, err := client.GetHIST(time.Date(2016, time.December, 12, 0, 0, 0, 0, time.UTC))
-	if err != nil {
-		panic(err)
-	} else if len(histData) == 0 {
-		panic(fmt.Errorf("Found %v available data feeds", len(histData)))
-	}
-
-	// Fetch the pcap dump for that date and iterate through its messages.
-	resp, err := http.Get(histData[0].Link)
+	eventsReader, err := client.StreamMarketEvents(
+		[]string{"AAPL", "SPY"},
+		[]tradier.Filter{tradier.FilterQuote, tradier.FilterTrade})
 	if err != nil {
 		panic(err)
 	}
-	defer resp.Body.Close()
 
-	packetDataSource, err := iex.NewPacketDataSource(resp.Body)
+	eventsCh := make(chan *tradier.StreamEvent)
+	eventStream := tradier.NewMarketEventStream(eventsReader, eventsCh)
+	defer eventStream.Stop()
+
+	demuxer := tradier.StreamDemuxer{
+		Quotes: func(quote *tradier.QuoteEvent) {
+			fmt.Printf("QUOTE %v: bid $%.02f (%v shares), ask $%.02f (%v shares)\n",
+				quote.Symbol, quote.Bid, quote.BidSize, quote.Ask, quote.AskSize)
+		},
+		Trades: func(trade *tradier.TradeEvent) {
+			fmt.Printf("TRADE %v: $%.02f (%v shares) at %v\n",
+				trade.Symbol, trade.Price, trade.Size, trade.DateMs)
+		},
+	}
+
+	demuxer.HandleChan(eventsCh)
+}
+```
+
+### Place and then cancel an order for SPY.
+
+```Go
+package main
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/timpalpant/go-tradier"
+)
+
+func main() {
+	params := tradier.DefaultParams("your-api-key-here")
+	client := tradier.NewClient(params)
+	client.SelectAccount("your-account-id-here")
+
+	// Place a limit order for 1 share of SPY at $1.00.
+	orderId, err := client.PlaceOrder(tradier.Order{
+		Class:    tradier.Equity,
+		Type:     tradier.LimitOrder,
+		Symbol:   "SPY",
+		Side:     tradier.Buy,
+		Quantity: 1,
+		Price:    1.00,
+		Duration: tradier.Day,
+	})
 	if err != nil {
 		panic(err)
 	}
-	pcapScanner := iex.NewPcapScanner(packetDataSource)
+	fmt.Printf("Placed order: %v\n", orderId)
 
-	// Write each quote update message to stdout, in JSON format.
-	enc := json.NewEncoder(os.Stdout)
+	time.Sleep(2 * time.Second)
+	order, err := client.GetOrderStatus(orderId)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("Order status: %v\n", order.Status)
 
-	for {
-		msg, err := pcapScanner.NextMessage()
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-
-			panic(err)
-		}
-
-		switch msg := msg.(type) {
-		case *tops.QuoteUpdateMessage:
-			enc.Encode(msg)
-		default:
-		}
+	// Cancel the order.
+	fmt.Printf("Canceling order: %v\n", orderId)
+	if err := client.CancelOrder(orderId); err != nil {
+		panic(err)
 	}
 }
 ```

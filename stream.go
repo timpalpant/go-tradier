@@ -1,6 +1,6 @@
-//go:generate ffjson $GOFILE
 package tradier
 
+//go:generate ffjson $GOFILE
 import (
 	"bufio"
 	"encoding/json"

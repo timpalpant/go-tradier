@@ -1,6 +1,6 @@
-//go:generate ffjson $GOFILE
 package tradier
 
+//go:generate ffjson $GOFILE
 import (
 	"database/sql/driver"
 	"encoding/json"
