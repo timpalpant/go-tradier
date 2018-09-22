@@ -1,6 +1,5 @@
 package tradier
 
-//go:generate ffjson $GOFILE
 import "encoding/json"
 
 type CorporateEvent struct {
