@@ -106,6 +106,8 @@ func (mes *MarketEventStream) consumeEvents(
 			case output <- event:
 			case <-mes.closeChan:
 				return
+			default:
+				Logger.Println("stream output channel is full, dropping stream event")
 			}
 		}
 	}
