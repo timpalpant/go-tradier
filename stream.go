@@ -93,22 +93,17 @@ func (mes *MarketEventStream) consumeEvents(
 	defer close(output)
 
 	for scanner.Scan() {
+		event := &StreamEvent{}
+		if err := UnmarshalStreamEvent(scanner.Bytes(), event); err != nil {
+			Logger.Println(err)
+		}
+
 		select {
+		case output <- event:
 		case <-mes.closeChan:
 			return
 		default:
-			event := &StreamEvent{}
-			if err := UnmarshalStreamEvent(scanner.Bytes(), event); err != nil {
-				Logger.Println(err)
-			}
-
-			select {
-			case output <- event:
-			case <-mes.closeChan:
-				return
-			default:
-				Logger.Println("stream output channel is full, dropping stream event")
-			}
+			Logger.Println("stream output channel is full, dropping stream event")
 		}
 	}
 
