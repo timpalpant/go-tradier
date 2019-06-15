@@ -243,38 +243,54 @@ func (tc *Client) PreviewOrder(order Order) (*OrderPreview, error) {
 // We also do some sanity checking to prevent placing orders with unset fields.
 func orderToParams(order Order) (url.Values, error) {
 	form := url.Values{}
-	if order.Class != Equity && order.Class != Option {
-		return form, fmt.Errorf("unknown order class: %v", order.Class)
-	}
 	form.Add("class", order.Class)
-	form.Add("symbol", order.Symbol)
-	if order.Duration != GTC && order.Duration != Day && order.Duration != PreMarket && order.Duration != PostMarket {
-		return form, fmt.Errorf("unknown order duration: %v", order.Duration)
-	}
 	form.Add("duration", order.Duration)
-	if order.Side != Buy && order.Side != BuyToCover && order.Side != Sell && order.Side != SellShort {
-		return form, fmt.Errorf("unknown order side: %v", order.Side)
-	}
-	form.Add("side", order.Side)
-	if order.Quantity <= 0 {
-		return form, fmt.Errorf("cannot order %v shares", order.Quantity)
-	}
-	form.Add("quantity", strconv.FormatFloat(order.Quantity, 'f', 0, 64))
-	if order.Type != MarketOrder && order.Type != LimitOrder && order.Type != StopOrder && order.Type != StopLimitOrder {
-		return form, fmt.Errorf("unknown order type: %v", order.Type)
-	}
-	form.Add("type", order.Type)
-	if order.Type == LimitOrder || order.Type == StopLimitOrder {
-		if order.Price <= 0 {
-			return form, fmt.Errorf("cannot place limit order without limit price")
+
+	switch order.Class {
+	case Equity, Option:
+		form.Add("symbol", order.Symbol)
+		form.Add("side", order.Side)
+		form.Add("quantity", strconv.FormatFloat(order.Quantity, 'f', 0, 64))
+		form.Add("type", order.Type)
+		if order.Type == LimitOrder || order.Type == StopLimitOrder {
+			form.Add("price", strconv.FormatFloat(order.Price, 'f', 2, 64))
 		}
-		form.Add("price", strconv.FormatFloat(order.Price, 'f', 2, 64))
-	}
-	if order.Type == StopOrder || order.Type == StopLimitOrder {
-		if order.StopPrice <= 0 {
-			return form, fmt.Errorf("cannot place stop order without stop price")
+		if order.Type == StopOrder || order.Type == StopLimitOrder {
+			form.Add("stop", strconv.FormatFloat(order.StopPrice, 'f', 2, 64))
 		}
-		form.Add("stop", strconv.FormatFloat(order.StopPrice, 'f', 2, 64))
+	case Multileg, Combo:
+		form.Add("symbol", order.Symbol)
+		form.Add("type", order.Type)
+		if order.Type == LimitOrder || order.Type == StopLimitOrder {
+			form.Add("price", strconv.FormatFloat(order.Price, 'f', 2, 64))
+		}
+		if order.Type == StopOrder || order.Type == StopLimitOrder {
+			form.Add("stop", strconv.FormatFloat(order.StopPrice, 'f', 2, 64))
+		}
+
+		for i, leg := range order.Legs {
+			form.Add(fmt.Sprintf("option_symbol[%d]", i), leg.OptionSymbol)
+			form.Add(fmt.Sprintf("side[%d]", i), leg.Side)
+			form.Add(fmt.Sprintf("quantity[%dd]", i), strconv.FormatFloat(leg.Quantity, 'f', 0, 64))
+		}
+	case OneTriggersOther, OneCancelsOther, OneTriggersOneCancelsOther:
+		for i, leg := range order.Legs {
+			form.Add(fmt.Sprintf("symbol[%d]", i), leg.Symbol)
+			form.Add(fmt.Sprintf("quantity[%d]", i), strconv.FormatFloat(leg.Quantity, 'f', 0, 64))
+			form.Add(fmt.Sprintf("type[%d]", i), leg.Type)
+			form.Add(fmt.Sprintf("side[%d]", i), leg.Side)
+			if leg.OptionSymbol != "" {
+				form.Add(fmt.Sprintf("option_symbol[%d]", i), leg.OptionSymbol)
+			}
+			if leg.Type == LimitOrder || leg.Type == StopLimitOrder {
+				form.Add(fmt.Sprintf("price[%d]", i), strconv.FormatFloat(leg.Price, 'f', 2, 64))
+			}
+			if leg.Type == StopOrder || leg.Type == StopLimitOrder {
+				form.Add(fmt.Sprintf("stop[%d]", i), strconv.FormatFloat(leg.StopPrice, 'f', 2, 64))
+			}
+		}
+	default:
+		return form, fmt.Errorf("unknown order class: %v", order.Class)
 	}
 	return form, nil
 }
@@ -659,6 +675,8 @@ func (tc *Client) StreamMarketEvents(
 		}
 		form.Add("filter", strings.Join(strFilters, ","))
 	}
+	// TODO: Make validOnly/flags configurable.
+	form.Add("advancedDetails", "true")
 	// If we fail here then just make a new session rather than retrying.
 	// This prevents repeated failures to a session that doesn't exist for
 	// some reason.

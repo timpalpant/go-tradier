@@ -95,10 +95,13 @@ type ClosedPosition struct {
 
 const (
 	// Order classes.
-	Equity   = "equity"
-	Option   = "option"
-	Multileg = "multileg"
-	Combo    = "combo"
+	Equity                     = "equity"
+	Option                     = "option"
+	Multileg                   = "multileg"
+	Combo                      = "combo"
+	OneTriggersOther           = "oto"
+	OneCancelsOther            = "oco"
+	OneTriggersOneCancelsOther = "otoco"
 
 	// Order sides.
 	Buy         = "buy"
