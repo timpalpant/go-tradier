@@ -38,13 +38,18 @@ type QuoteEvent struct {
 }
 
 type TimeSaleEvent struct {
-	Symbol   string
-	Exchange string  `json:"exch"`
-	Bid      float64 `json:",string"`
-	Ask      float64 `json:",string"`
-	Last     float64 `json:",string"`
-	Size     int64   `json:",string"`
-	DateMs   int64   `json:"date,string"`
+	Symbol     string
+	Exchange   string  `json:"exch"`
+	Bid        float64 `json:",string"`
+	Ask        float64 `json:",string"`
+	Last       float64 `json:",string"`
+	Size       int64   `json:",string"`
+	DateMs     int64   `json:"date,string"`
+	Seq        int64
+	Flag       string
+	Cancel     bool
+	Correction bool
+	Session    string
 }
 
 type TradeEvent struct {
@@ -62,7 +67,7 @@ type SummaryEvent struct {
 	Open          float64 `json:",string"`
 	High          float64 `json:",string"`
 	Low           float64 `json:",string"`
-	PreviousClose float64 `json:"prevClose,string'`
+	PreviousClose float64 `json:"prevClose,string"`
 }
 
 // MarketEventStream scans the newline-delimited market stream
