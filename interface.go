@@ -78,6 +78,11 @@ type Security struct {
 	Description string
 }
 
+type OptionSymbol struct {
+	Root    string `json:"rootSymbol"`
+	Options []string
+}
+
 type FloatOrNaN float64
 
 func (f *FloatOrNaN) UnmarshalJSON(data []byte) error {

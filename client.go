@@ -425,6 +425,17 @@ func (tc *Client) LookupSecurities(
 	return result.Securities.Security, err
 }
 
+// Get a list of symbols matching the given parameters.
+func (tc *Client) LookupOptionSymbols(underlying string) ([]OptionSymbol, error) {
+	url := fmt.Sprintf("%s/v1/markets/options/lookup?underlying=%s", tc.endpoint, underlying)
+
+	var result struct {
+		Symbols []OptionSymbol
+	}
+	err := tc.getJSON(url, &result)
+	return result.Symbols, err
+}
+
 // Get the securities on the Easy-to-Borrow list.
 func (tc *Client) GetEasyToBorrow() ([]Security, error) {
 	url := tc.endpoint + "/v1/markets/etb"
