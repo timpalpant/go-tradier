@@ -1,4 +1,4 @@
-module github.com/timpalpant/go-tradier
+module github.com/pbdeuchler/go-tradier
 
 require (
 	github.com/cenkalti/backoff v2.0.0+incompatible
