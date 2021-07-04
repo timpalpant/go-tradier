@@ -471,7 +471,7 @@ func (tc *Client) GetOptionStrikes(symbol string, expiration time.Time) ([]float
 
 // Get an option chain.
 func (tc *Client) GetOptionChain(symbol string, expiration time.Time) ([]*Quote, error) {
-	params := "?symbol=" + symbol + "&expiration=" + expiration.Format("2006-01-02")
+	params := "?greeks=true&symbol=" + symbol + "&expiration=" + expiration.Format("2006-01-02")
 	url := tc.endpoint + "/v1/markets/options/chains" + params
 	var result struct {
 		Options struct {
@@ -480,17 +480,6 @@ func (tc *Client) GetOptionChain(symbol string, expiration time.Time) ([]*Quote,
 	}
 	err := tc.getJSON(url, &result)
 	return result.Options.Option, err
-}
-
-func (tc *Client) GetQuotes(symbols []string) ([]*Quote, error) {
-	url := tc.endpoint + "/v1/markets/quotes?symbols=" + strings.Join(symbols, ",")
-	var result struct {
-		Quotes struct {
-			Quote []*Quote
-		}
-	}
-	err := tc.getJSON(url, &result)
-	return result.Quotes.Quote, err
 }
 
 func (tc *Client) getTimeSalesUrl(symbol string, interval Interval, start, end time.Time) string {
@@ -788,6 +777,40 @@ func (tc *Client) getJSON(url string, result interface{}) error {
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := ioutil.ReadAll(resp.Body)
+		return errors.New(resp.Status + ": " + string(body))
+	}
+
+	dec := json.NewDecoder(resp.Body)
+	return dec.Decode(result)
+}
+
+func (tc *Client) GetQuotes(symbols []string) ([]*Quote, error) {
+	var result struct {
+		Quotes struct {
+			Quote []*Quote
+		}
+	}
+
+	uri := tc.endpoint + "/v1/markets/quotes"
+	data := url.Values{"symbols": {strings.Join(symbols, ",")}, "greeks": {"true"}}
+
+	err := tc.postJSON(uri, data, &result)
+	if err != nil {
+		return nil, err
+	}
+
+	return result.Quotes.Quote, nil
+}
+
+func (tc *Client) postJSON(url string, data url.Values, result interface{}) error {
+	resp, err := tc.do("POST", url, data, tc.retryLimit)
+	if err != nil {
+		return err
+	}
+
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := ioutil.ReadAll(resp.Body)
